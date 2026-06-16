@@ -1,11 +1,39 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Player, PlayerState } from "./types";
 import PlayerPanel from "./components/PlayerPanel";
+import GameOverModal from "./components/GameOverModal";
 import { playClick } from "./utils/sound";
 import { formatDuration } from "./utils/format";
 
+interface PlayerStats {
+  moves: number;
+  totalMs: number;
+  avgMs: number;
+  longestMs: number;
+  shortestMs: number;
+}
+
+function computeStats(s: PlayerState): PlayerStats {
+  if (s.moves === 0) {
+    return { moves: 0, totalMs: 0, avgMs: 0, longestMs: 0, shortestMs: 0 };
+  }
+  let longest = -Infinity;
+  let shortest = Infinity;
+  for (const m of s.moveHistory) {
+    if (m > longest) longest = m;
+    if (m < shortest) shortest = m;
+  }
+  return {
+    moves: s.moves,
+    totalMs: s.totalThinkMs,
+    avgMs: s.totalThinkMs / s.moves,
+    longestMs: longest,
+    shortestMs: shortest,
+  };
+}
+
 function freshState(): PlayerState {
-  return { currentMoveMs: 0, moves: 0, totalThinkMs: 0, lastMoveMs: null };
+  return { currentMoveMs: 0, moves: 0, totalThinkMs: 0, lastMoveMs: null, moveHistory: [] };
 }
 
 export default function App() {
@@ -15,6 +43,7 @@ export default function App() {
   const [active, setActive] = useState<Player | null>(null); // null = not started
   const [running, setRunning] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
+  const [gameOver, setGameOver] = useState(false);
 
   // Refs for the ticking engine
   const tickRef = useRef<number | null>(null);
@@ -26,6 +55,7 @@ export default function App() {
     setBlack(freshState());
     setActive(null);
     setRunning(false);
+    setGameOver(false);
   }, []);
 
   // Ticking loop: counts UP for the active player's current move
@@ -86,6 +116,7 @@ export default function App() {
         moves: w.moves + 1,
         totalThinkMs: w.totalThinkMs + w.currentMoveMs,
         lastMoveMs: w.currentMoveMs,
+        moveHistory: [...w.moveHistory, w.currentMoveMs],
       }));
       setActive("black");
     } else {
@@ -94,6 +125,7 @@ export default function App() {
         moves: b.moves + 1,
         totalThinkMs: b.totalThinkMs + b.currentMoveMs,
         lastMoveMs: b.currentMoveMs,
+        moveHistory: [...b.moveHistory, b.currentMoveMs],
       }));
       setActive("white");
     }
@@ -123,6 +155,12 @@ export default function App() {
       turnStartRef.current = performance.now();
       setRunning(true);
     }
+  }
+
+  function handleGameOver() {
+    // Stop the clock and show the summary popup
+    setRunning(false);
+    setGameOver(true);
   }
 
   const started = active !== null;
@@ -157,6 +195,14 @@ export default function App() {
             {running ? "⏸ Pause" : "▶ Resume"}
           </button>
           <button
+            onClick={handleGameOver}
+            disabled={!started}
+            className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-bold text-white hover:bg-rose-500 active:scale-95 transition disabled:opacity-40 shadow-md shadow-rose-500/30"
+            title="End the match and view the summary"
+          >
+            🏁 Game Over
+          </button>
+          <button
             onClick={reset}
             className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700 active:scale-95 transition"
           >
@@ -183,7 +229,7 @@ export default function App() {
               e.currentTarget.blur();
               handleSwitchTurn();
             }}
-            className={`flex h-20 sm:h-28 w-full cursor-pointer select-none items-center justify-between px-4 sm:px-10 font-bold transition-all duration-150 active:scale-[0.99] ${
+            className={`flex h-auto min-h-[7rem] sm:min-h-[10rem] py-3 w-full cursor-pointer select-none items-center justify-between px-3 sm:px-10 transition-all duration-150 active:scale-[0.99] ${
               !started
                 ? "bg-emerald-500 text-slate-950 hover:bg-emerald-400 active:bg-emerald-600 shadow-lg shadow-emerald-500/30"
                 : running
@@ -192,14 +238,20 @@ export default function App() {
             }`}
           >
             {/* Left info */}
-            <div className="flex flex-col items-start text-[11px] sm:text-sm font-extrabold opacity-85 text-left leading-tight">
-              <span>TOTAL MOVES: {white.moves + black.moves}</span>
-              <span className="mt-1">TOTAL TIME: {formatDuration(white.totalThinkMs + black.totalThinkMs)}</span>
+            <div className="flex flex-col items-start gap-1 opacity-90 text-left leading-none">
+              <div className="text-[10px] sm:text-xs font-black uppercase tracking-widest opacity-80">Total Moves</div>
+              <div className="font-mono font-black text-2xl sm:text-4xl">
+                {white.moves + black.moves}
+              </div>
+              <div className="text-[10px] sm:text-xs font-black uppercase tracking-widest opacity-80 mt-1">Match Time</div>
+              <div className="font-mono font-black text-xl sm:text-3xl leading-none">
+                {formatDuration(white.totalThinkMs + black.totalThinkMs)}
+              </div>
             </div>
 
             {/* Center label */}
             <div className="flex flex-col items-center justify-center text-center">
-              <div className="text-2xl sm:text-4xl md:text-5xl font-black uppercase tracking-widest flex items-center gap-2 sm:gap-4">
+              <div className="text-4xl sm:text-6xl md:text-7xl font-black uppercase tracking-widest flex items-center gap-2 sm:gap-4 leading-none">
                 {!started && (
                   <>
                     <span>▶</span>
@@ -209,9 +261,9 @@ export default function App() {
                 )}
                 {started && running && (
                   <>
-                    <span className="text-lg sm:text-3xl">⤡</span>
+                    <span className="text-3xl sm:text-5xl">⤡</span>
                     <span>SWITCH</span>
-                    <span className="text-lg sm:text-3xl">⤢</span>
+                    <span className="text-3xl sm:text-5xl">⤢</span>
                   </>
                 )}
                 {started && !running && (
@@ -222,15 +274,27 @@ export default function App() {
                   </>
                 )}
               </div>
-              <div className="mt-1 text-[9px] sm:text-xs font-black tracking-widest opacity-80 uppercase">
+              <div className="mt-2 text-[10px] sm:text-sm font-black tracking-widest opacity-80 uppercase">
                 {!started ? "White Moves First" : running ? "Tap or Press Space" : "Paused"}
               </div>
             </div>
 
             {/* Right info */}
-            <div className="flex flex-col items-end text-[11px] sm:text-sm font-extrabold opacity-85 text-right leading-tight">
-              <span>WHITE: {formatDuration(white.totalThinkMs)}</span>
-              <span className="mt-1">BLACK: {formatDuration(black.totalThinkMs)}</span>
+            <div className="flex flex-col items-end gap-1 opacity-90 text-right leading-none">
+              <div className="text-[10px] sm:text-xs font-black uppercase tracking-widest opacity-80 flex items-center gap-2 justify-end">
+                <span className="inline-block h-3 w-3 rounded-full bg-white ring-2 ring-slate-400" />
+                White Total
+              </div>
+              <div className="font-mono font-black text-xl sm:text-3xl leading-none">
+                {formatDuration(white.totalThinkMs)}
+              </div>
+              <div className="text-[10px] sm:text-xs font-black uppercase tracking-widest opacity-80 mt-1 flex items-center gap-2 justify-end">
+                <span className="inline-block h-3 w-3 rounded-full bg-slate-950 ring-2 ring-slate-700" />
+                Black Total
+              </div>
+              <div className="font-mono font-black text-xl sm:text-3xl leading-none">
+                {formatDuration(black.totalThinkMs)}
+              </div>
             </div>
           </button>
         </div>
@@ -243,6 +307,16 @@ export default function App() {
           isRunning={running}
         />
       </main>
+
+      {/* Game Over Modal */}
+      {gameOver && (
+        <GameOverModal
+          whiteStats={computeStats(white)}
+          blackStats={computeStats(black)}
+          onRestart={reset}
+          onClose={() => setGameOver(false)}
+        />
+      )}
     </div>
   );
 }

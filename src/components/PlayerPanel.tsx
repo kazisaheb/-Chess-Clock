@@ -27,7 +27,7 @@ export default function PlayerPanel({
 
   return (
     <div
-      className={`relative flex w-full flex-1 select-none flex-col items-center justify-between overflow-hidden p-6 transition-opacity duration-200 sm:p-10 ${baseBg} ${
+      className={`relative flex w-full flex-1 select-none flex-col items-center justify-between overflow-hidden px-4 py-4 sm:px-8 sm:py-6 transition-opacity duration-200 ${baseBg} ${
         flipped ? "rotate-180" : ""
       }`}
       style={{ minHeight: "38vh" }}
@@ -38,17 +38,17 @@ export default function PlayerPanel({
       )}
 
       {/* Header row */}
-      <div className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-widest">
+      <div className="flex w-full items-center justify-between font-bold uppercase tracking-widest">
         <div className="flex items-center gap-2">
           <span
-            className={`inline-block h-3.5 w-3.5 rounded-full ${
+            className={`inline-block h-4 w-4 rounded-full sm:h-5 sm:w-5 ${
               isWhite ? "bg-white ring-2 ring-slate-400" : "bg-slate-950 ring-2 ring-slate-500"
             }`}
           />
-          <span className={`text-sm font-bold ${textColor}`}>{player}</span>
+          <span className={`text-base sm:text-xl font-black ${textColor}`}>{player}</span>
           {isThinking && (
             <span
-              className={`ml-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-bold animate-pulse ${
+              className={`ml-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] sm:text-sm font-black animate-pulse ${
                 isWhite ? "bg-emerald-100 text-emerald-700" : "bg-emerald-950 text-emerald-400"
               }`}
             >
@@ -57,12 +57,14 @@ export default function PlayerPanel({
             </span>
           )}
         </div>
-        <span className={subTextColor}>Move {state.moves + 1}</span>
+        <span className={`text-lg sm:text-2xl font-black ${subTextColor}`}>
+          Move {state.moves + 1}
+        </span>
       </div>
 
       {/* Big clock — counting UP */}
       <div
-        className={`my-4 font-mono text-7xl font-bold tabular-nums tracking-tight transition-opacity sm:text-8xl md:text-9xl ${textColor} ${
+        className={`my-2 sm:my-4 font-mono font-black tabular-nums tracking-tight leading-none transition-opacity text-[clamp(4.5rem,18vw,13rem)] ${textColor} ${
           !isThinking ? "opacity-50" : "opacity-100"
         }`}
       >
@@ -71,25 +73,25 @@ export default function PlayerPanel({
 
       {/* Footer stats */}
       <div
-        className={`grid w-full max-w-md grid-cols-3 gap-2 rounded-xl p-3 text-center text-xs transition-opacity ${statBg} ${subTextColor} ${
+        className={`grid w-full max-w-2xl grid-cols-3 gap-2 sm:gap-4 rounded-xl p-3 sm:p-4 text-center transition-opacity ${statBg} ${
           !isThinking ? "opacity-50" : "opacity-100"
         }`}
       >
         <div>
-          <div className="font-semibold uppercase tracking-wider opacity-75">Last Move</div>
-          <div className={`mt-0.5 text-sm font-bold ${textColor}`}>
+          <div className={`font-black uppercase tracking-wider ${subTextColor} text-[10px] sm:text-sm`}>Last Move</div>
+          <div className={`mt-1 font-mono font-black ${textColor} text-2xl sm:text-4xl leading-none`}>
             {state.lastMoveMs !== null ? formatDuration(state.lastMoveMs) : "—"}
           </div>
         </div>
         <div>
-          <div className="font-semibold uppercase tracking-wider opacity-75">Avg Move</div>
-          <div className={`mt-0.5 text-sm font-bold ${textColor}`}>
+          <div className={`font-black uppercase tracking-wider ${subTextColor} text-[10px] sm:text-sm`}>Avg Move</div>
+          <div className={`mt-1 font-mono font-black ${textColor} text-2xl sm:text-4xl leading-none`}>
             {state.moves > 0 ? formatDuration(avgMove) : "—"}
           </div>
         </div>
         <div>
-          <div className="font-semibold uppercase tracking-wider opacity-75">Time Used</div>
-          <div className={`mt-0.5 text-sm font-bold ${textColor}`}>
+          <div className={`font-black uppercase tracking-wider ${subTextColor} text-[10px] sm:text-sm`}>Time Used</div>
+          <div className={`mt-1 font-mono font-black ${textColor} text-2xl sm:text-4xl leading-none`}>
             {formatDuration(state.totalThinkMs)}
           </div>
         </div>
