@@ -1,67 +1,36 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Player, PlayerState, TimeControl } from "./types";
+import type { Player, PlayerState } from "./types";
 import PlayerPanel from "./components/PlayerPanel";
-import PresetPicker from "./components/PresetPicker";
-import CustomTimeModal from "./components/CustomTimeModal";
-import { playClick, playFlag, playWarning } from "./utils/sound";
+import { playClick } from "./utils/sound";
+import { formatDuration } from "./utils/format";
 
-const DEFAULT_TC: TimeControl = {
-  id: "blitz-5-3",
-  name: "5 | 3",
-  baseMinutes: 5,
-  incrementSeconds: 3,
-  category: "Blitz",
-};
-
-function freshState(tc: TimeControl): PlayerState {
-  return { timeMs: tc.baseMinutes * 60_000, moves: 0, totalThinkMs: 0 };
+function freshState(): PlayerState {
+  return { currentMoveMs: 0, moves: 0, totalThinkMs: 0, lastMoveMs: null };
 }
 
 export default function App() {
-  const [tc, setTc] = useState<TimeControl>(DEFAULT_TC);
-  const [white, setWhite] = useState<PlayerState>(freshState(DEFAULT_TC));
-  const [black, setBlack] = useState<PlayerState>(freshState(DEFAULT_TC));
+  const [white, setWhite] = useState<PlayerState>(freshState());
+  const [black, setBlack] = useState<PlayerState>(freshState());
 
   const [active, setActive] = useState<Player | null>(null); // null = not started
   const [running, setRunning] = useState(false);
-  const [flagged, setFlagged] = useState<Player | null>(null);
-  const [showSettings, setShowSettings] = useState(true);
-  const [showCustom, setShowCustom] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
 
-  const [lastMoveWhite, setLastMoveWhite] = useState<number | null>(null);
-  const [lastMoveBlack, setLastMoveBlack] = useState<number | null>(null);
-
-  // Refs for the ticking engine — avoids re-creating intervals on every state change.
+  // Refs for the ticking engine
   const tickRef = useRef<number | null>(null);
   const lastTickRef = useRef<number>(0);
-  const turnStartRef = useRef<number>(0); // timestamp when current player's turn started
-  const warnedRef = useRef<{ white: boolean; black: boolean }>({ white: false, black: false });
+  const turnStartRef = useRef<number>(0);
 
-  const reset = useCallback(
-    (newTc?: TimeControl) => {
-      const t = newTc ?? tc;
-      setWhite(freshState(t));
-      setBlack(freshState(t));
-      setActive(null);
-      setRunning(false);
-      setFlagged(null);
-      setLastMoveWhite(null);
-      setLastMoveBlack(null);
-      warnedRef.current = { white: false, black: false };
-    },
-    [tc]
-  );
+  const reset = useCallback(() => {
+    setWhite(freshState());
+    setBlack(freshState());
+    setActive(null);
+    setRunning(false);
+  }, []);
 
-  // Apply new time control
-  function applyTc(next: TimeControl) {
-    setTc(next);
-    reset(next);
-  }
-
-  // Ticking loop using requestAnimationFrame for smoothness
+  // Ticking loop: counts UP for the active player's current move
   useEffect(() => {
-    if (!running || !active || flagged) {
+    if (!running || !active) {
       if (tickRef.current) {
         cancelAnimationFrame(tickRef.current);
         tickRef.current = null;
@@ -77,33 +46,9 @@ export default function App() {
       lastTickRef.current = now;
 
       if (active === "white") {
-        setWhite((w) => {
-          const nextMs = Math.max(0, w.timeMs - dt);
-          if (nextMs <= 10_000 && !warnedRef.current.white && nextMs > 0 && soundOn) {
-            warnedRef.current.white = true;
-            playWarning();
-          }
-          if (nextMs === 0) {
-            setFlagged("white");
-            setRunning(false);
-            if (soundOn) playFlag();
-          }
-          return { ...w, timeMs: nextMs };
-        });
+        setWhite((w) => ({ ...w, currentMoveMs: w.currentMoveMs + dt }));
       } else {
-        setBlack((b) => {
-          const nextMs = Math.max(0, b.timeMs - dt);
-          if (nextMs <= 10_000 && !warnedRef.current.black && nextMs > 0 && soundOn) {
-            warnedRef.current.black = true;
-            playWarning();
-          }
-          if (nextMs === 0) {
-            setFlagged("black");
-            setRunning(false);
-            if (soundOn) playFlag();
-          }
-          return { ...b, timeMs: nextMs };
-        });
+        setBlack((b) => ({ ...b, currentMoveMs: b.currentMoveMs + dt }));
       }
 
       tickRef.current = requestAnimationFrame(tick);
@@ -113,23 +58,12 @@ export default function App() {
     return () => {
       if (tickRef.current) cancelAnimationFrame(tickRef.current);
     };
-  }, [running, active, flagged, soundOn]);
+  }, [running, active]);
 
-  // Reset warning flag when a player's clock is replenished above threshold (e.g. via increment)
-  useEffect(() => {
-    if (white.timeMs > 10_000) warnedRef.current.white = false;
-  }, [white.timeMs]);
-  useEffect(() => {
-    if (black.timeMs > 10_000) warnedRef.current.black = false;
-  }, [black.timeMs]);
-
-  // Handle a player tapping their clock (ending their move)
-  function handleTap(player: Player) {
-    if (flagged) return;
-
-    // First tap of the game: only white can start
+  // Main turn switch logic
+  const handleSwitchTurn = useCallback(() => {
+    // First tap: start White
     if (active === null) {
-      if (player !== "white") return; // White must move first
       setActive("white");
       setRunning(true);
       turnStartRef.current = performance.now();
@@ -137,43 +71,55 @@ export default function App() {
       return;
     }
 
-    // Only the active player can end their own move
-    if (player !== active) return;
-    if (!running) return;
+    // If paused, resume
+    if (!running) {
+      turnStartRef.current = performance.now();
+      setRunning(true);
+      if (soundOn) playClick();
+      return;
+    }
 
-    const now = performance.now();
-    const thinkMs = now - turnStartRef.current;
-    const incMs = tc.incrementSeconds * 1000;
-
-    if (player === "white") {
+    // Normal switch: capture this move's elapsed time, reset for next move
+    if (active === "white") {
       setWhite((w) => ({
-        timeMs: w.timeMs + incMs,
+        currentMoveMs: 0,
         moves: w.moves + 1,
-        totalThinkMs: w.totalThinkMs + thinkMs,
+        totalThinkMs: w.totalThinkMs + w.currentMoveMs,
+        lastMoveMs: w.currentMoveMs,
       }));
-      setLastMoveWhite(thinkMs);
       setActive("black");
     } else {
       setBlack((b) => ({
-        timeMs: b.timeMs + incMs,
+        currentMoveMs: 0,
         moves: b.moves + 1,
-        totalThinkMs: b.totalThinkMs + thinkMs,
+        totalThinkMs: b.totalThinkMs + b.currentMoveMs,
+        lastMoveMs: b.currentMoveMs,
       }));
-      setLastMoveBlack(thinkMs);
       setActive("white");
     }
 
-    turnStartRef.current = now;
+    turnStartRef.current = performance.now();
     if (soundOn) playClick();
-  }
+  }, [active, running, soundOn]);
+
+  // Spacebar / Enter hotkey
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.code === "Space" || e.code === "Enter") && !e.repeat) {
+        if (e.target instanceof HTMLElement && e.target.tagName === "INPUT") return;
+        e.preventDefault();
+        handleSwitchTurn();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleSwitchTurn]);
 
   function togglePause() {
-    if (flagged || active === null) return;
+    if (active === null) return;
     if (running) {
-      // Pausing — credit elapsed think time to current turn start (just stop, don't bank)
       setRunning(false);
     } else {
-      // Resuming
       turnStartRef.current = performance.now();
       setRunning(true);
     }
@@ -183,128 +129,120 @@ export default function App() {
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-950 text-white">
-      {/* Top bar */}
-      <header className="flex items-center justify-between gap-3 border-b border-slate-800 bg-slate-900/80 px-4 py-3 backdrop-blur">
+      {/* Top Header Bar */}
+      <header className="flex items-center justify-between gap-3 border-b border-slate-800 bg-slate-900/90 px-4 py-3 backdrop-blur z-20">
         <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 text-xl">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 text-xl shadow-md shadow-amber-500/20">
             ♛
           </div>
           <div>
             <div className="text-sm font-bold leading-tight">Chess Clock</div>
-            <div className="text-xs text-slate-400 leading-tight">
-              {tc.name} · {tc.category}
-            </div>
+            <div className="text-xs text-slate-400 leading-tight">Stopwatch · Per-Move Timing</div>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={() => setSoundOn((s) => !s)}
-            className="rounded-lg bg-slate-800 px-3 py-2 text-sm text-slate-200 hover:bg-slate-700"
+            className="rounded-lg bg-slate-800 px-3 py-2 text-sm text-slate-200 hover:bg-slate-700 active:scale-95 transition"
             title="Toggle sound"
           >
             {soundOn ? "🔊" : "🔇"}
           </button>
           <button
             onClick={togglePause}
-            disabled={!started || !!flagged}
-            className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700 disabled:opacity-40"
+            disabled={!started}
+            className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700 active:scale-95 transition disabled:opacity-40"
           >
             {running ? "⏸ Pause" : "▶ Resume"}
           </button>
           <button
-            onClick={() => reset()}
-            className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700"
+            onClick={reset}
+            className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700 active:scale-95 transition"
           >
             ↺ Reset
-          </button>
-          <button
-            onClick={() => setShowSettings((s) => !s)}
-            className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700"
-          >
-            ⚙ {showSettings ? "Hide" : "Settings"}
           </button>
         </div>
       </header>
 
-      {/* Main playing area */}
+      {/* Main Playing Area */}
       <main className="flex flex-1 flex-col">
-        {/* Black panel (top, flipped so they can read it from across the table) */}
+        {/* Black player panel (Top, Flipped 180°) */}
         <PlayerPanel
           player="black"
           state={black}
           isActive={active === "black"}
           isRunning={running}
-          isFlagged={flagged === "black"}
           flipped
-          lastMoveMs={lastMoveBlack}
-          onTap={() => handleTap("black")}
         />
 
-        {/* Center divider with totals */}
-        <div className="flex items-center justify-center gap-4 border-y border-slate-800 bg-slate-900 px-4 py-2 text-xs text-slate-400">
-          <span>
-            Total moves:{" "}
-            <span className="font-semibold text-slate-200">{white.moves + black.moves}</span>
-          </span>
-          <span className="text-slate-600">•</span>
-          <span>
-            Increment:{" "}
-            <span className="font-semibold text-slate-200">+{tc.incrementSeconds}s</span>
-          </span>
-          {flagged && (
-            <>
-              <span className="text-slate-600">•</span>
-              <span className="font-semibold text-red-400">
-                {flagged === "white" ? "Black" : "White"} wins on time!
-              </span>
-            </>
-          )}
+        {/* Big Central Switch Button */}
+        <div className="relative flex w-full flex-col items-center justify-center border-y-4 border-slate-950 bg-slate-900 z-10 shadow-2xl">
+          <button
+            onClick={(e) => {
+              e.currentTarget.blur();
+              handleSwitchTurn();
+            }}
+            className={`flex h-20 sm:h-28 w-full cursor-pointer select-none items-center justify-between px-4 sm:px-10 font-bold transition-all duration-150 active:scale-[0.99] ${
+              !started
+                ? "bg-emerald-500 text-slate-950 hover:bg-emerald-400 active:bg-emerald-600 shadow-lg shadow-emerald-500/30"
+                : running
+                ? "bg-amber-500 text-slate-950 hover:bg-amber-400 active:bg-amber-600 shadow-xl shadow-amber-500/30"
+                : "bg-indigo-500 text-white hover:bg-indigo-400 active:bg-indigo-600"
+            }`}
+          >
+            {/* Left info */}
+            <div className="flex flex-col items-start text-[11px] sm:text-sm font-extrabold opacity-85 text-left leading-tight">
+              <span>TOTAL MOVES: {white.moves + black.moves}</span>
+              <span className="mt-1">TOTAL TIME: {formatDuration(white.totalThinkMs + black.totalThinkMs)}</span>
+            </div>
+
+            {/* Center label */}
+            <div className="flex flex-col items-center justify-center text-center">
+              <div className="text-2xl sm:text-4xl md:text-5xl font-black uppercase tracking-widest flex items-center gap-2 sm:gap-4">
+                {!started && (
+                  <>
+                    <span>▶</span>
+                    <span>START</span>
+                    <span className="rotate-180">▶</span>
+                  </>
+                )}
+                {started && running && (
+                  <>
+                    <span className="text-lg sm:text-3xl">⤡</span>
+                    <span>SWITCH</span>
+                    <span className="text-lg sm:text-3xl">⤢</span>
+                  </>
+                )}
+                {started && !running && (
+                  <>
+                    <span>▶</span>
+                    <span>RESUME</span>
+                    <span>▶</span>
+                  </>
+                )}
+              </div>
+              <div className="mt-1 text-[9px] sm:text-xs font-black tracking-widest opacity-80 uppercase">
+                {!started ? "White Moves First" : running ? "Tap or Press Space" : "Paused"}
+              </div>
+            </div>
+
+            {/* Right info */}
+            <div className="flex flex-col items-end text-[11px] sm:text-sm font-extrabold opacity-85 text-right leading-tight">
+              <span>WHITE: {formatDuration(white.totalThinkMs)}</span>
+              <span className="mt-1">BLACK: {formatDuration(black.totalThinkMs)}</span>
+            </div>
+          </button>
         </div>
 
-        {/* White panel (bottom) */}
+        {/* White player panel (Bottom) */}
         <PlayerPanel
           player="white"
           state={white}
           isActive={active === "white"}
           isRunning={running}
-          isFlagged={flagged === "white"}
-          lastMoveMs={lastMoveWhite}
-          onTap={() => handleTap("white")}
         />
       </main>
-
-      {/* Settings drawer */}
-      {showSettings && (
-        <aside className="border-t border-slate-800 bg-slate-900 p-4">
-          <div className="mx-auto max-w-3xl">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-white">Time Control</h2>
-              {started && (
-                <span className="text-xs text-amber-400">
-                  Changing presets will reset the game.
-                </span>
-              )}
-            </div>
-            <PresetPicker
-              current={tc}
-              onSelect={applyTc}
-              onCustom={() => setShowCustom(true)}
-            />
-          </div>
-        </aside>
-      )}
-
-      {showCustom && (
-        <CustomTimeModal
-          initial={tc}
-          onSave={(next) => {
-            applyTc(next);
-            setShowCustom(false);
-          }}
-          onClose={() => setShowCustom(false)}
-        />
-      )}
     </div>
   );
 }

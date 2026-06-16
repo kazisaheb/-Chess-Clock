@@ -1,15 +1,8 @@
 export type Player = "white" | "black";
 
-export interface TimeControl {
-  id: string;
-  name: string;
-  baseMinutes: number;
-  incrementSeconds: number;
-  category: "Bullet" | "Blitz" | "Rapid" | "Classical" | "Custom";
-}
-
 export interface PlayerState {
-  timeMs: number;
-  moves: number;
-  totalThinkMs: number; // total time spent thinking (across all moves)
+  currentMoveMs: number; // elapsed time of the current move (counts up)
+  moves: number; // completed moves
+  totalThinkMs: number; // total time across all completed moves
+  lastMoveMs: number | null; // duration of the most recently completed move
 }
