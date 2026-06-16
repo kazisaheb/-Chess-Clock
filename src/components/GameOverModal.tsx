@@ -29,7 +29,7 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="text-[10px] sm:text-xs font-black uppercase tracking-wider opacity-75">
         {label}
       </div>
-      <div className="mt-1 font-mono font-black text-xl sm:text-3xl leading-none">
+      <div className="mt-1 truncate font-mono font-black text-xl sm:text-3xl leading-none text-current">
         {value}
       </div>
     </div>
@@ -97,19 +97,19 @@ export default function GameOverModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
+      className="fixed inset-0 z-50 grid h-[100dvh] w-screen place-items-center overflow-y-auto bg-black/80 p-3 backdrop-blur-md sm:p-4"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-4xl overflow-hidden rounded-2xl bg-slate-900 shadow-2xl ring-2 ring-amber-500/50"
+        className="max-h-[calc(100dvh-1.5rem)] w-full max-w-4xl overflow-y-auto rounded-2xl bg-slate-900 shadow-2xl ring-2 ring-amber-500/50 sm:max-h-[calc(100dvh-2rem)]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between gap-4 border-b border-slate-800 bg-gradient-to-r from-amber-500 to-amber-400 px-6 py-4 text-slate-900">
-          <div className="flex items-center gap-3">
-            <span className="text-3xl">🏁</span>
-            <div>
-              <h2 className="text-xl sm:text-2xl font-black uppercase tracking-widest leading-none">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-800 bg-gradient-to-r from-amber-500 to-amber-400 px-4 py-3 text-slate-900 sm:px-6 sm:py-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="shrink-0 text-3xl">🏁</span>
+            <div className="min-w-0">
+              <h2 className="truncate text-xl sm:text-2xl font-black uppercase tracking-widest leading-none">
                 Game Over
               </h2>
               <p className="text-xs sm:text-sm font-bold opacity-80">Final match summary</p>
@@ -125,7 +125,7 @@ export default function GameOverModal({
         </div>
 
         {/* Match totals */}
-        <div className="grid grid-cols-2 gap-4 border-b border-slate-800 bg-slate-950/40 px-6 py-4">
+        <div className="grid grid-cols-2 gap-3 border-b border-slate-800 bg-slate-950/40 px-4 py-4 sm:gap-4 sm:px-6">
           <div>
             <div className="text-[10px] sm:text-xs font-black uppercase tracking-widest text-amber-400">
               Total Moves
@@ -145,11 +145,11 @@ export default function GameOverModal({
         </div>
 
         {/* Player cards */}
-        <div className="grid gap-4 p-6 md:grid-cols-2">
+        <div className="grid gap-4 p-4 sm:p-6 md:grid-cols-2">
           {cards.map(({ player, stats, isWinner, winnerReason }) => (
             <div
               key={player}
-              className={`relative flex flex-col rounded-xl p-5 ring-2 transition-all ${
+              className={`relative flex min-w-0 flex-col rounded-xl p-4 ring-2 sm:p-5 ${
                 isWinner
                   ? player === "white"
                     ? "bg-white text-slate-900 ring-amber-500 shadow-lg shadow-amber-500/40"
@@ -160,8 +160,8 @@ export default function GameOverModal({
               }`}
             >
               {/* Title row */}
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
                   <span
                     className={`inline-block h-5 w-5 rounded-full ${
                       player === "white"
@@ -170,14 +170,14 @@ export default function GameOverModal({
                     }`}
                   />
                   <span
-                    className={`text-lg sm:text-xl font-black uppercase tracking-widest ${
+                    className={`truncate text-lg sm:text-xl font-black uppercase tracking-widest ${
                       isWinner ? "" : "opacity-70"
                     }`}
                   >
                     {player}
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex shrink-0 items-center gap-2">
                   <span
                     className={`text-[10px] sm:text-xs font-black uppercase tracking-widest ${
                       isWinner ? "" : "opacity-60"
@@ -190,7 +190,7 @@ export default function GameOverModal({
               </div>
 
               {/* Stats grid */}
-              <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4">
+              <div className="mt-5 grid min-w-0 grid-cols-2 gap-x-3 gap-y-4 sm:gap-x-4">
                 <Stat label="Total Time" value={formatDuration(stats.totalMs)} />
                 <Stat label="Avg / Move" value={formatDuration(stats.avgMs)} />
                 <Stat label="Longest Move" value={formatDuration(stats.longestMs)} />
@@ -211,7 +211,7 @@ export default function GameOverModal({
         </div>
 
         {/* Footer actions */}
-        <div className="flex flex-col gap-2 border-t border-slate-800 bg-slate-950/40 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-2 border-t border-slate-800 bg-slate-950/40 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <p className="text-xs sm:text-sm font-medium text-slate-400">
             Want to play another match? Reset clears all times.
           </p>

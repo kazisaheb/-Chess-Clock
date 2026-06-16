@@ -92,6 +92,8 @@ export default function App() {
 
   // Main turn switch logic
   const handleSwitchTurn = useCallback(() => {
+    if (gameOver) return;
+
     // First tap: start White
     if (active === null) {
       setActive("white");
@@ -132,11 +134,12 @@ export default function App() {
 
     turnStartRef.current = performance.now();
     if (soundOn) playClick();
-  }, [active, running, soundOn]);
+  }, [active, running, soundOn, gameOver]);
 
   // Spacebar / Enter hotkey
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (gameOver) return;
       if ((e.code === "Space" || e.code === "Enter") && !e.repeat) {
         if (e.target instanceof HTMLElement && e.target.tagName === "INPUT") return;
         e.preventDefault();
@@ -145,7 +148,7 @@ export default function App() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleSwitchTurn]);
+  }, [handleSwitchTurn, gameOver]);
 
   function togglePause() {
     if (active === null) return;
@@ -158,31 +161,56 @@ export default function App() {
   }
 
   function handleGameOver() {
-    // Stop the clock and show the summary popup
+    // Stop the clock, include the in-progress move, and show the summary popup.
     setRunning(false);
+    if (active === "white") {
+      setWhite((w) =>
+        w.currentMoveMs > 0
+          ? {
+              currentMoveMs: 0,
+              moves: w.moves + 1,
+              totalThinkMs: w.totalThinkMs + w.currentMoveMs,
+              lastMoveMs: w.currentMoveMs,
+              moveHistory: [...w.moveHistory, w.currentMoveMs],
+            }
+          : w
+      );
+    } else if (active === "black") {
+      setBlack((b) =>
+        b.currentMoveMs > 0
+          ? {
+              currentMoveMs: 0,
+              moves: b.moves + 1,
+              totalThinkMs: b.totalThinkMs + b.currentMoveMs,
+              lastMoveMs: b.currentMoveMs,
+              moveHistory: [...b.moveHistory, b.currentMoveMs],
+            }
+          : b
+      );
+    }
     setGameOver(true);
   }
 
   const started = active !== null;
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-950 text-white">
+    <div className="flex h-[100dvh] w-screen flex-col overflow-hidden bg-slate-950 text-white">
       {/* Top Header Bar */}
-      <header className="flex items-center justify-between gap-3 border-b border-slate-800 bg-slate-900/90 px-4 py-3 backdrop-blur z-20">
-        <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 text-xl shadow-md shadow-amber-500/20">
+      <header className="z-20 grid h-16 shrink-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 overflow-hidden border-b border-slate-800 bg-slate-900/90 px-2 sm:px-4 backdrop-blur">
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 text-xl shadow-md shadow-amber-500/20">
             ♛
           </div>
-          <div>
-            <div className="text-sm font-bold leading-tight">Chess Clock</div>
-            <div className="text-xs text-slate-400 leading-tight">Stopwatch · Per-Move Timing</div>
+          <div className="min-w-0">
+            <div className="truncate text-sm font-bold leading-tight">Chess Clock</div>
+            <div className="truncate text-xs text-slate-400 leading-tight">Stopwatch · Per-Move Timing</div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           <button
             onClick={() => setSoundOn((s) => !s)}
-            className="rounded-lg bg-slate-800 px-3 py-2 text-sm text-slate-200 hover:bg-slate-700 active:scale-95 transition"
+            className="h-10 rounded-lg bg-slate-800 px-2 text-sm text-slate-200 transition hover:bg-slate-700 active:bg-slate-700 sm:px-3"
             title="Toggle sound"
           >
             {soundOn ? "🔊" : "🔇"}
@@ -190,29 +218,35 @@ export default function App() {
           <button
             onClick={togglePause}
             disabled={!started}
-            className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700 active:scale-95 transition disabled:opacity-40"
+            className="h-10 rounded-lg bg-slate-800 px-2 text-sm font-medium text-slate-200 transition hover:bg-slate-700 active:bg-slate-700 disabled:opacity-40 sm:px-3"
           >
-            {running ? "⏸ Pause" : "▶ Resume"}
+            <span className="sm:hidden">{running ? "⏸" : "▶"}</span>
+            <span className="hidden sm:inline">{running ? "⏸ Pause" : "▶ Resume"}</span>
           </button>
           <button
             onClick={handleGameOver}
             disabled={!started}
-            className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-bold text-white hover:bg-rose-500 active:scale-95 transition disabled:opacity-40 shadow-md shadow-rose-500/30"
+            className="h-10 rounded-lg bg-rose-600 px-2 text-sm font-bold text-white shadow-md shadow-rose-500/30 transition hover:bg-rose-500 active:bg-rose-700 disabled:opacity-40 sm:px-3"
             title="End the match and view the summary"
           >
-            🏁 Game Over
+            <span className="sm:hidden">🏁</span>
+            <span className="hidden sm:inline">🏁 Game Over</span>
           </button>
           <button
             onClick={reset}
-            className="rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700 active:scale-95 transition"
+            className="h-10 rounded-lg bg-slate-800 px-2 text-sm font-medium text-slate-200 transition hover:bg-slate-700 active:bg-slate-700 sm:px-3"
           >
-            ↺ Reset
+            <span className="sm:hidden">↺</span>
+            <span className="hidden sm:inline">↺ Reset</span>
           </button>
         </div>
       </header>
 
       {/* Main Playing Area */}
-      <main className="flex flex-1 flex-col">
+      <main
+        className="grid min-h-0 flex-1 overflow-hidden"
+        style={{ gridTemplateRows: "minmax(0, 1fr) clamp(6rem, 16dvh, 9rem) minmax(0, 1fr)" }}
+      >
         {/* Black player panel (Top, Flipped 180°) */}
         <PlayerPanel
           player="black"
@@ -223,13 +257,13 @@ export default function App() {
         />
 
         {/* Big Central Switch Button */}
-        <div className="relative flex w-full flex-col items-center justify-center border-y-4 border-slate-950 bg-slate-900 z-10 shadow-2xl">
+        <div className="relative z-10 h-full min-h-0 w-full overflow-hidden border-y-4 border-slate-950 bg-slate-900 shadow-2xl">
           <button
             onClick={(e) => {
               e.currentTarget.blur();
               handleSwitchTurn();
             }}
-            className={`flex h-auto min-h-[7rem] sm:min-h-[10rem] py-3 w-full cursor-pointer select-none items-center justify-between px-3 sm:px-10 transition-all duration-150 active:scale-[0.99] ${
+            className={`grid h-full w-full cursor-pointer select-none grid-cols-1 items-center justify-items-center overflow-hidden px-3 py-2 transition-colors duration-150 active:brightness-95 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] sm:px-8 ${
               !started
                 ? "bg-emerald-500 text-slate-950 hover:bg-emerald-400 active:bg-emerald-600 shadow-lg shadow-emerald-500/30"
                 : running
@@ -238,7 +272,7 @@ export default function App() {
             }`}
           >
             {/* Left info */}
-            <div className="flex flex-col items-start gap-1 opacity-90 text-left leading-none">
+            <div className="hidden min-w-0 flex-col items-start gap-1 justify-self-start overflow-hidden opacity-90 text-left leading-none sm:flex">
               <div className="text-[10px] sm:text-xs font-black uppercase tracking-widest opacity-80">Total Moves</div>
               <div className="font-mono font-black text-2xl sm:text-4xl">
                 {white.moves + black.moves}
@@ -250,8 +284,8 @@ export default function App() {
             </div>
 
             {/* Center label */}
-            <div className="flex flex-col items-center justify-center text-center">
-              <div className="text-4xl sm:text-6xl md:text-7xl font-black uppercase tracking-widest flex items-center gap-2 sm:gap-4 leading-none">
+            <div className="flex min-w-0 flex-col items-center justify-center overflow-hidden text-center">
+              <div className="flex items-center gap-2 whitespace-nowrap font-black uppercase tracking-widest leading-none text-[clamp(2rem,9vw,4.5rem)] sm:gap-4">
                 {!started && (
                   <>
                     <span>▶</span>
@@ -261,9 +295,9 @@ export default function App() {
                 )}
                 {started && running && (
                   <>
-                    <span className="text-3xl sm:text-5xl">⤡</span>
+                    <span className="text-[0.8em]">⤡</span>
                     <span>SWITCH</span>
-                    <span className="text-3xl sm:text-5xl">⤢</span>
+                    <span className="text-[0.8em]">⤢</span>
                   </>
                 )}
                 {started && !running && (
@@ -280,7 +314,7 @@ export default function App() {
             </div>
 
             {/* Right info */}
-            <div className="flex flex-col items-end gap-1 opacity-90 text-right leading-none">
+            <div className="hidden min-w-0 flex-col items-end gap-1 justify-self-end overflow-hidden opacity-90 text-right leading-none sm:flex">
               <div className="text-[10px] sm:text-xs font-black uppercase tracking-widest opacity-80 flex items-center gap-2 justify-end">
                 <span className="inline-block h-3 w-3 rounded-full bg-white ring-2 ring-slate-400" />
                 White Total

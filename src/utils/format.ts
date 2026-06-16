@@ -7,13 +7,9 @@ export function formatClock(ms: number): string {
   const tenths = Math.floor((ms % 1000) / 100);
 
   if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}.${tenths}`;
   }
-  // Show tenths when under 20 seconds for tension :)
-  if (totalSeconds < 20) {
-    return `${minutes}:${String(seconds).padStart(2, "0")}.${tenths}`;
-  }
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+  return `${minutes}:${String(seconds).padStart(2, "0")}.${tenths}`;
 }
 
 export function formatDuration(ms: number): string {
